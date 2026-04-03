@@ -5,6 +5,11 @@ from ouroboros.types import DimensionScore
 
 
 class CorrectnessScorer:
+    """Scores correctness as the fraction of tasks that pass.
+
+    A pass/fail dict with no entries returns 0.0.
+    """
+
     def score(self, results: dict[str, bool]) -> DimensionScore:
         """Score based on pass/fail results. Empty results = 0.0."""
         if not results:
