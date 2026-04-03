@@ -233,9 +233,22 @@ class ImprovementLoop:
         if not entries:
             return "No previous iterations."
         lines = []
+        failed_hypotheses = []
         for e in entries[-10:]:  # last 10 entries
-            lines.append(f"  #{e.iteration} [{e.outcome.value}]: {e.hypothesis} — {e.reason}")
-        return "\n".join(lines)
+            status = "MERGED" if e.outcome == IterationOutcome.MERGED else "FAILED"
+            lines.append(
+                f"  #{e.iteration} [{status}] {e.hypothesis}\n"
+                f"    Files: {', '.join(e.files_changed) if e.files_changed else 'none'}\n"
+                f"    Reason: {e.reason}"
+            )
+            if e.outcome != IterationOutcome.MERGED:
+                failed_hypotheses.append(e.hypothesis)
+
+        summary = "## Recent History\n" + "\n".join(lines)
+        if failed_hypotheses:
+            summary += "\n\n## DO NOT REPEAT — Previously Failed Hypotheses\n"
+            summary += "\n".join(f"  - {h}" for h in failed_hypotheses)
+        return summary
 
     def _describe_improvement(self, before: ScoreboardSnapshot, after: ScoreboardSnapshot) -> str:
         parts = []
