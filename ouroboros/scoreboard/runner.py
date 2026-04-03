@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -129,12 +130,14 @@ def _run_tests(target_path: Path, test_command: str) -> tuple[dict[str, bool], i
     try:
         cmd_parts = [p for p in shlex.split(test_command) if p not in ("-v", "--verbose")]
         cmd_parts += ["--tb=no", "-q"]
+        # Run from repo root (parent of target_path) so relative test paths resolve
+        repo_root = target_path.parent if target_path.name != "." else target_path
         result = subprocess.run(
             cmd_parts,
             capture_output=True,
             text=True,
             timeout=120,
-            cwd=str(target_path),
+            cwd=str(repo_root),
         )
         stdout = result.stdout
         test_results: dict[str, bool] = {}
@@ -147,14 +150,18 @@ def _run_tests(target_path: Path, test_command: str) -> tuple[dict[str, bool], i
                 test_name = line.split(" FAILED")[0].strip()
                 test_results[test_name] = False
 
-        # Fallback: parse summary line "X passed, Y failed"
+        # Fallback: parse summary line like "1 failed, 101 passed" or "102 passed"
         if not test_results:
             for line in reversed(stdout.splitlines()):
-                if "failed" in line or "error" in line:
-                    test_results["suite"] = False
-                    break
-                if "passed" in line:
-                    test_results["suite"] = True
+                passed_match = re.search(r"(\d+) passed", line)
+                failed_match = re.search(r"(\d+) failed", line)
+                if passed_match or failed_match:
+                    n_passed = int(passed_match.group(1)) if passed_match else 0
+                    n_failed = int(failed_match.group(1)) if failed_match else 0
+                    for i in range(n_passed):
+                        test_results[f"test_{i + 1}"] = True
+                    for i in range(n_failed):
+                        test_results[f"failed_{i + 1}"] = False
                     break
 
         # If still nothing, use exit code
