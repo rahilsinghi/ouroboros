@@ -5,7 +5,17 @@ from ouroboros.types import DimensionScore
 
 
 class EfficiencyScorer:
+    """Measure efficiency as the ratio of baseline tokens to current tokens.
+
+    The score is capped at 1.0, so lower token usage yields a higher score.
+    """
+
     def __init__(self, baseline_tokens: int) -> None:
+        """Initialize the scorer.
+
+        Args:
+            baseline_tokens: Reference token count used for normalization.
+        """
         self.baseline_tokens = baseline_tokens
 
     def score(self, current_tokens: int) -> DimensionScore:
