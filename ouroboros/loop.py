@@ -31,6 +31,9 @@ class LoopResult:
     iterations_rolled_back: int
     total_duration_seconds: float
     stop_reason: str
+    total_cost_usd: float = 0.0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
 
 
 class ImprovementLoop:
@@ -90,6 +93,9 @@ class ImprovementLoop:
             iterations_rolled_back=rolled_back,
             total_duration_seconds=time.time() - start_time,
             stop_reason=stop_reason,
+            total_cost_usd=self.cost_tracker.total_usd,
+            total_input_tokens=self.cost_tracker.total_input_tokens,
+            total_output_tokens=self.cost_tracker.total_output_tokens,
         )
 
     def _run_iteration(self, iteration: int) -> IterationOutcome:

@@ -113,6 +113,8 @@ def _cmd_run(config, args):
     print(f"  Rolled back:          {result.iterations_rolled_back}")
     print(f"  Duration:             {result.total_duration_seconds:.1f}s")
     print(f"  Stop reason:          {result.stop_reason}")
+    print(f"  Cost:                 ${result.total_cost_usd:.4f}")
+    print(f"  Tokens:               {result.total_input_tokens:,} in / {result.total_output_tokens:,} out")
 
 
 def _cmd_scoreboard(config, args):
