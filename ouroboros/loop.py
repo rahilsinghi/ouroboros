@@ -193,18 +193,22 @@ class ImprovementLoop:
         return set()
 
     def _read_target_files(self, dimension: str) -> dict[str, str]:
-        """Read relevant source files based on the dimension being targeted."""
+        """Read relevant source files, excluding blocked paths."""
         target_dir = self.repo_root / self.config.target_path
         files: dict[str, str] = {}
         if not target_dir.exists():
             return files
         for py_file in sorted(target_dir.rglob("*.py")):
             relative = py_file.relative_to(self.repo_root)
+            rel_str = str(relative)
+            # Skip blocked paths
+            if any(rel_str.startswith(bp) for bp in self.config.sandbox_blocked_paths):
+                continue
             try:
                 content = py_file.read_text()
                 # Skip very large files and __pycache__
                 if len(content) < 10_000 and "__pycache__" not in str(py_file):
-                    files[str(relative)] = content
+                    files[rel_str] = content
             except (OSError, UnicodeDecodeError):
                 continue
             # Cap at 20 files to stay within LLM context
