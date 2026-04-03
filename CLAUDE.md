@@ -19,15 +19,15 @@ Four-agent loop: OBSERVE → HYPOTHESIZE → IMPLEMENT → EVALUATE
 
 All models currently set to Sonnet for cost ($0.10/iteration).
 
-## 6-Dimension Scoreboard
-| Dimension | Scorer | Status |
-|-----------|--------|--------|
-| code_quality | ruff (60%) + radon (40%) | Working, scores 0.24 |
-| correctness | pytest pass rate | Broken — 0.0 (test path misconfigured) |
-| efficiency | token count vs baseline | Working, scores 1.0 |
-| regression | previously-passing still pass | Working, scores 1.0 (no history) |
-| tool_selection | routing accuracy | Placeholder 1.0 |
-| real_world | LLM-graded eval | Placeholder 0.5 |
+## 6-Dimension Scoreboard (baseline as of Phase 1.5)
+| Dimension | Scorer | Score | Status |
+|-----------|--------|-------|--------|
+| code_quality | ruff (60%) + radon (40%) | 0.30 | Working — ruff violations dragging it down |
+| correctness | pytest pass rate | 1.00 | Fixed in Phase 1.5A — 102/102 tests pass |
+| efficiency | source char count vs baseline | 1.00 | Auto-calibrated (baseline=0 means self-referential) |
+| regression | previously-passing still pass | 1.00 | Working (no history = no regressions) |
+| tool_selection | routing accuracy | 1.00 | Placeholder |
+| real_world | LLM-graded eval | 0.50 | Placeholder |
 
 ## Safety-Critical Files (blocked_paths in config)
 These files CANNOT be modified by the improvement loop:
@@ -38,17 +38,28 @@ These files CANNOT be modified by the improvement loop:
 - `ouroboros/config.py` — configuration loading
 - `.git/`, `docs/`
 
-## Current Phase: 1.5 (Fix Feedback Loop + Smarter Agents)
-Phase 1 complete (84/84 tests pass, 2 real iterations ran, loop works end-to-end).
+## Current Phase: 1.5 COMPLETE
+Phase 1.5 complete (102/102 tests pass, 5 real iterations ran across 2 runs).
 
-### Phase 1.5A — Fix Feedback Loop (NEXT)
-The self-improvement loop can't merge anything because:
-1. **Correctness = 0.0**: `_run_tests()` runs pytest against wrong path. Tests are in `tests/ouroboros/`, not inside `ouroboros/` dir
-2. **Agents target blocked files**: Strategist now gets blocked_paths list but still sometimes proposes blocked changes
-3. **JSON parsing fragility**: Truncated LLM responses crash iterations (partial fix: JSON repair in base.py)
+### Phase 1.5A — Fix Feedback Loop (DONE)
+- Fixed correctness scoring (was 0.0, now 1.0) — test runner uses configured command
+- Blocked files filtered from strategist context
+- JSON retry with error feedback on parse failure
+- Cost tracking infrastructure (CostTracker + tokens_to_usd)
+- Efficiency baseline auto-calibrated
 
-### Phase 1.5C — Smarter Agents (AFTER A)
-Better strategist prompts, multi-step planning, test-before-merge, chain-of-thought.
+### Phase 1.5C — Smarter Agents (DONE)
+- Strategist receives ruff violation details and radon complexity per-function
+- Implementer validates syntax (ast.parse) before committing
+- Observer has dimension-specific guidance in system prompt
+- Ledger summary includes failed hypothesis DO NOT REPEAT list
+
+### Remaining Gap
+No successful merges yet. Agents propose valid improvements but:
+- Merge gate requires improvement beyond 0.02 noise tolerance
+- Sonnet implementer sometimes returns empty JSON (abandoned iterations)
+- code_quality is the main improvable dimension (0.30)
+- Next step: try with Opus implementer, or lower noise tolerance
 
 ## Key Commands
 ```bash
