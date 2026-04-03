@@ -70,7 +70,7 @@ def run_scoreboard(
     target_path: Path,
     iteration: int = 0,
     test_command: str = "python -m pytest tests/ -v",
-    baseline_tokens: int = 1000,
+    baseline_tokens: int = 0,
     previously_passing: set[str] | None = None,
 ) -> ScoreboardSnapshot:
     """Run all 6 scoreboard dimensions against a target path.
