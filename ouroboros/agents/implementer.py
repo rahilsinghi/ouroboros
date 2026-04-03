@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,6 +85,16 @@ class ImplementerAgent:
             file_path.write_text(content)
             written.append(path)
 
+        # Validate before committing
+        if written:
+            validation_error = self._validate_files(worktree_path, written)
+            if validation_error:
+                return ImplementResult(
+                    success=False,
+                    files_written=tuple(written),
+                    error=validation_error,
+                )
+
         # Stage and commit
         if written:
             subprocess.run(
@@ -98,6 +109,19 @@ class ImplementerAgent:
             )
 
         return ImplementResult(success=True, files_written=tuple(written))
+
+    def _validate_files(self, worktree_path: Path, written: list[str]) -> str | None:
+        """Validate written files. Returns error string or None if all valid."""
+        for path in written:
+            file_path = worktree_path / path
+            if not file_path.suffix == ".py":
+                continue
+            content = file_path.read_text()
+            try:
+                ast.parse(content)
+            except SyntaxError as e:
+                return f"SyntaxError in {path}: {e}"
+        return None
 
     def _build_prompt(self, plan: ChangePlan, source_files: dict[str, str]) -> str:
         file_sections = "\n\n".join(
