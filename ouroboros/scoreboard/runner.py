@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -128,7 +127,7 @@ def _run_tests(target_path: Path, test_command: str) -> tuple[dict[str, bool], i
     """Run tests and parse results. Returns (test_results, approximate_token_count)."""
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", str(target_path / ".."), "-v", "--tb=no", "-q"],
+            test_command.split() + ["--tb=no", "-q"],
             capture_output=True,
             text=True,
             timeout=120,
@@ -136,7 +135,6 @@ def _run_tests(target_path: Path, test_command: str) -> tuple[dict[str, bool], i
         )
         stdout = result.stdout
         test_results: dict[str, bool] = {}
-        token_count = len(stdout.split())
 
         for line in stdout.splitlines():
             if " PASSED" in line:
@@ -146,9 +144,32 @@ def _run_tests(target_path: Path, test_command: str) -> tuple[dict[str, bool], i
                 test_name = line.split(" FAILED")[0].strip()
                 test_results[test_name] = False
 
-        # If no individual results parsed, treat overall exit code
+        # Fallback: parse summary line "X passed, Y failed"
+        if not test_results:
+            import re
+
+            for line in reversed(stdout.splitlines()):
+                if "passed" in line:
+                    m = re.search(r"(\d+) passed", line)
+                    if m:
+                        test_results["suite"] = True
+                        break
+                if "failed" in line or "error" in line:
+                    test_results["suite"] = False
+                    break
+
+        # If still nothing, use exit code
         if not test_results:
             test_results["suite"] = result.returncode == 0
+
+        # Token count: count source file characters as proxy for code size
+        token_count = 0
+        for py_file in target_path.rglob("*.py"):
+            if "__pycache__" not in str(py_file):
+                try:
+                    token_count += len(py_file.read_text())
+                except OSError:
+                    pass
 
         return test_results, token_count
 
