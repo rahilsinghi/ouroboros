@@ -21,6 +21,9 @@ class BaseAgent:
         self.model = model
         self.role = role
         self.timeout_seconds = timeout_seconds
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.last_response_text = ""
 
     def call(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> AgentResponse:
         """Call the LLM with system and user prompts."""
@@ -31,11 +34,37 @@ class BaseAgent:
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
-        return AgentResponse(
+        agent_response = AgentResponse(
             text=response.content[0].text,
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
         )
+        self.total_input_tokens += agent_response.input_tokens
+        self.total_output_tokens += agent_response.output_tokens
+        self.last_response_text = agent_response.text
+        return agent_response
+
+    def call_with_json_retry(
+        self, system_prompt: str, user_prompt: str, max_tokens: int = 16384
+    ) -> dict:
+        """Call LLM and parse JSON response, retrying once on failure."""
+        response = self.call(system_prompt, user_prompt, max_tokens=max_tokens)
+        if not response.text.strip():
+            response = self.call(
+                system_prompt,
+                user_prompt + "\n\nIMPORTANT: You MUST respond with a JSON object. Do not return empty.",
+                max_tokens=max_tokens,
+            )
+        try:
+            return self.parse_json(response.text)
+        except json.JSONDecodeError as first_error:
+            retry_prompt = (
+                f"Your previous response was invalid JSON. Error: {first_error}\n\n"
+                f"Original request:\n{user_prompt}\n\n"
+                "Please respond with ONLY the JSON object, no prose or markdown."
+            )
+            retry_response = self.call(system_prompt, retry_prompt, max_tokens=max_tokens)
+            return self.parse_json(retry_response.text)
 
     def parse_json(self, raw: str) -> dict:
         """Parse JSON from LLM response, handling markdown fences and truncation."""

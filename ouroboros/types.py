@@ -13,6 +13,7 @@ class IterationOutcome(str, Enum):
     TIMEOUT = "TIMEOUT"
     EVAL_FAILURE = "EVAL_FAILURE"
     ABANDONED = "ABANDONED"
+    KILLED = "KILLED"
 
 
 @dataclass(frozen=True)
