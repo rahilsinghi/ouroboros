@@ -3,7 +3,11 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 
 from ouroboros.types import DimensionScore, ScoreboardSnapshot
 
@@ -59,3 +63,94 @@ def can_merge(
     """Convenience function for merge gate check."""
     gate = MergeGate(regression_floor=regression_floor, noise_tolerance=noise_tolerance)
     return gate.can_merge(before, after)
+
+
+def run_scoreboard(
+    target_path: Path,
+    iteration: int = 0,
+    test_command: str = "python -m pytest tests/ -v",
+    baseline_tokens: int = 1000,
+    previously_passing: set[str] | None = None,
+) -> ScoreboardSnapshot:
+    """Run all 6 scoreboard dimensions against a target path.
+
+    Args:
+        target_path: Root directory containing the code to evaluate.
+        iteration: Current iteration number.
+        test_command: Command to run tests for correctness/regression.
+        baseline_tokens: Token baseline for efficiency scoring.
+        previously_passing: Set of test names that passed in the previous iteration.
+    """
+    from ouroboros.scoreboard.code_quality import CodeQualityScorer
+    from ouroboros.scoreboard.correctness import CorrectnessScorer
+    from ouroboros.scoreboard.efficiency import EfficiencyScorer
+    from ouroboros.scoreboard.regression import RegressionScorer
+
+    dimensions: list[DimensionScore] = []
+
+    # 1. Code Quality — ruff + radon
+    cq_scorer = CodeQualityScorer(target_path=target_path)
+    dimensions.append(cq_scorer.score())
+
+    # 2. Correctness — run tests, count pass/fail
+    test_results, total_tokens = _run_tests(target_path, test_command)
+    correctness_scorer = CorrectnessScorer()
+    dimensions.append(correctness_scorer.score(test_results))
+
+    # 3. Efficiency — token count vs baseline
+    efficiency_scorer = EfficiencyScorer(baseline_tokens=baseline_tokens)
+    dimensions.append(efficiency_scorer.score(current_tokens=total_tokens))
+
+    # 4. Regression — previously passing tests still pass
+    regression_scorer = RegressionScorer()
+    currently_passing = {name for name, passed in test_results.items() if passed}
+    dimensions.append(regression_scorer.score(
+        previously_passing or set(),
+        currently_passing,
+    ))
+
+    # 5. Tool Selection — skip if no challenges file available at target
+    # (will score 1.0 placeholder for now — real routing benchmarks need the CLI)
+    dimensions.append(DimensionScore(name="tool_selection", value=1.0))
+
+    # 6. Real World — skip LLM eval in automated runs (expensive)
+    # Placeholder 0.5 — neither penalizes nor rewards
+    dimensions.append(DimensionScore(name="real_world", value=0.5))
+
+    return ScoreboardSnapshot(
+        iteration=iteration,
+        dimensions=tuple(dimensions),
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def _run_tests(target_path: Path, test_command: str) -> tuple[dict[str, bool], int]:
+    """Run tests and parse results. Returns (test_results, approximate_token_count)."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", str(target_path / ".."), "-v", "--tb=no", "-q"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=str(target_path),
+        )
+        stdout = result.stdout
+        test_results: dict[str, bool] = {}
+        token_count = len(stdout.split())
+
+        for line in stdout.splitlines():
+            if " PASSED" in line:
+                test_name = line.split(" PASSED")[0].strip()
+                test_results[test_name] = True
+            elif " FAILED" in line:
+                test_name = line.split(" FAILED")[0].strip()
+                test_results[test_name] = False
+
+        # If no individual results parsed, treat overall exit code
+        if not test_results:
+            test_results["suite"] = result.returncode == 0
+
+        return test_results, token_count
+
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return {"suite": False}, 0

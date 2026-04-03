@@ -1,9 +1,10 @@
 # ouroboros.yaml — Ouroboros self-improvement engine configuration
+# Self-targeting mode: Ouroboros improves its own code
 
 target:
-  path: src/
-  cli_command: "python -m src.main"
-  test_command: "python -m pytest tests/src/"
+  path: ouroboros/
+  cli_command: "python -m ouroboros"
+  test_command: "python -m pytest tests/ouroboros/ -v"
 
 models:
   observer: claude-sonnet-4-6
@@ -19,15 +20,19 @@ loop:
 
 sandbox:
   allowed_commands:
-    - "python -m src.main"
+    - "python -m ouroboros"
     - "python -m pytest"
-    - "mypy --strict src/"
-    - "ruff check src/"
+    - "mypy --strict ouroboros/"
+    - "ruff check ouroboros/"
   blocked_paths:
-    - "ouroboros/"
-    - "tests/"
-    - "benchmarks/"
+    # Safety: never modify the core loop, safety, or git internals
+    - "ouroboros/loop.py"
+    - "ouroboros/sandbox/"
+    - "ouroboros/agents/evaluator.py"
+    - "ouroboros/scoreboard/runner.py"
+    - "ouroboros/config.py"
     - ".git/"
+    - "docs/"
   timeout_seconds: 300
 
 scoreboard:

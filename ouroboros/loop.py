@@ -161,27 +161,46 @@ class ImprovementLoop:
 
     def _run_scoreboard(self, target_path: Path) -> ScoreboardSnapshot:
         """Run all benchmark dimensions against a target path. Override in tests."""
-        # This will be filled in when we wire up the full scoreboard runner
-        from ouroboros.scoreboard.code_quality import CodeQualityScorer
+        from ouroboros.scoreboard.runner import run_scoreboard
 
-        cq = CodeQualityScorer(target_path=target_path / self.config.target_path)
-        cq_score = cq.score()
-        return ScoreboardSnapshot(
-            iteration=0,
-            dimensions=(cq_score,),
-            timestamp=datetime.now(timezone.utc).isoformat(),
+        return run_scoreboard(
+            target_path=target_path / self.config.target_path,
+            iteration=self.ledger.latest_iteration(),
+            test_command=self.config.target_test_command,
+            previously_passing=self._get_previously_passing(),
         )
+
+    def _get_previously_passing(self) -> set[str]:
+        """Get test names that passed in the most recent merged iteration."""
+        entries = self.ledger.read_all()
+        for entry in reversed(entries):
+            if entry.outcome == IterationOutcome.MERGED:
+                # Extract passing tests from the after scoreboard
+                correctness = entry.scoreboard_after.get("correctness")
+                if correctness and correctness.value > 0:
+                    # We don't store individual test names in the snapshot,
+                    # so return empty set — regression scorer treats this as "no history"
+                    return set()
+        return set()
 
     def _read_target_files(self, dimension: str) -> dict[str, str]:
         """Read relevant source files based on the dimension being targeted."""
         target_dir = self.repo_root / self.config.target_path
         files: dict[str, str] = {}
-        # For routing, read the key routing files
-        key_files = ["runtime.py", "commands.py", "tools.py"]
-        for name in key_files:
-            path = target_dir / name
-            if path.exists():
-                files[f"{self.config.target_path}{name}"] = path.read_text()
+        if not target_dir.exists():
+            return files
+        for py_file in sorted(target_dir.rglob("*.py")):
+            relative = py_file.relative_to(self.repo_root)
+            try:
+                content = py_file.read_text()
+                # Skip very large files and __pycache__
+                if len(content) < 10_000 and "__pycache__" not in str(py_file):
+                    files[str(relative)] = content
+            except (OSError, UnicodeDecodeError):
+                continue
+            # Cap at 20 files to stay within LLM context
+            if len(files) >= 20:
+                break
         return files
 
     def _summarize_ledger(self, entries: list) -> str:
