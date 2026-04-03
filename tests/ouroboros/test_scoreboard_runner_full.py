@@ -40,6 +40,8 @@ class TestRunScoreboard:
 
     def test_run_tests_uses_configured_test_command(self, python_project: Path):
         """_run_tests must invoke the provided test_command, not a hardcoded one."""
+        import shlex
+
         with patch("ouroboros.scoreboard.runner.subprocess.run") as mock_run:
             mock_run.return_value.stdout = "test_foo PASSED\n"
             mock_run.return_value.returncode = 0
@@ -49,9 +51,12 @@ class TestRunScoreboard:
 
             called_args = mock_run.call_args
             cmd_list = called_args[0][0] if called_args[0] else called_args[1]["args"]
-            # The command must be the configured test_command tokens + appended flags,
-            # NOT the hardcoded sys.executable + pytest path.
-            expected = custom_cmd.split() + ["--tb=no", "-q"]
+            # -v/--verbose flags are stripped before appending -q to avoid conflicts.
+            # The command must use the configured test_command (minus verbose flags)
+            # plus the appended --tb=no and -q flags.
+            expected = [
+                p for p in shlex.split(custom_cmd) if p not in ("-v", "--verbose")
+            ] + ["--tb=no", "-q"]
             assert cmd_list == expected, (
                 f"Expected command to use configured test_command, got: {cmd_list}"
             )

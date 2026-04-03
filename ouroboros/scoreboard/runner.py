@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -126,8 +127,10 @@ def run_scoreboard(
 def _run_tests(target_path: Path, test_command: str) -> tuple[dict[str, bool], int]:
     """Run tests and parse results. Returns (test_results, approximate_token_count)."""
     try:
+        cmd_parts = [p for p in shlex.split(test_command) if p not in ("-v", "--verbose")]
+        cmd_parts += ["--tb=no", "-q"]
         result = subprocess.run(
-            test_command.split() + ["--tb=no", "-q"],
+            cmd_parts,
             capture_output=True,
             text=True,
             timeout=120,
@@ -146,16 +149,12 @@ def _run_tests(target_path: Path, test_command: str) -> tuple[dict[str, bool], i
 
         # Fallback: parse summary line "X passed, Y failed"
         if not test_results:
-            import re
-
             for line in reversed(stdout.splitlines()):
-                if "passed" in line:
-                    m = re.search(r"(\d+) passed", line)
-                    if m:
-                        test_results["suite"] = True
-                        break
                 if "failed" in line or "error" in line:
                     test_results["suite"] = False
+                    break
+                if "passed" in line:
+                    test_results["suite"] = True
                     break
 
         # If still nothing, use exit code
