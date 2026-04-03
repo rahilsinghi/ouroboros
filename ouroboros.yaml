@@ -1,0 +1,41 @@
+# ouroboros.yaml — Ouroboros self-improvement engine configuration
+
+target:
+  path: src/
+  cli_command: "python -m src.main"
+  test_command: "python -m pytest tests/src/"
+
+models:
+  observer: claude-sonnet-4-6
+  strategist: claude-opus-4-6
+  implementer: claude-opus-4-6
+  evaluator: claude-sonnet-4-6
+
+loop:
+  max_iterations: 10
+  time_budget_minutes: 180
+  max_tokens_per_iteration: 100000
+  cooldown_seconds: 30
+
+sandbox:
+  allowed_commands:
+    - "python -m src.main"
+    - "python -m pytest"
+    - "mypy --strict src/"
+    - "ruff check src/"
+  blocked_paths:
+    - "ouroboros/"
+    - "tests/"
+    - "benchmarks/"
+    - ".git/"
+  timeout_seconds: 300
+
+scoreboard:
+  merge_gate:
+    regression_rate: 1.0
+    noise_tolerance: 0.02
+
+budget:
+  max_usd_per_run: 10.00
+  max_usd_per_iteration: 2.00
+  warn_at_percentage: 80

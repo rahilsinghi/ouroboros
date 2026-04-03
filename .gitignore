@@ -1,0 +1,19 @@
+__pycache__/
+.venv/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+
+# Ouroboros runtime data
+.ouroboros/
+.worktrees/
+.port_sessions/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
