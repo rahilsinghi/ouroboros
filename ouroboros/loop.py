@@ -88,32 +88,34 @@ class ImprovementLoop:
     def _run_iteration(self, iteration: int) -> IterationOutcome:
         """Execute one full OBSERVE → HYPOTHESIZE → IMPLEMENT → EVALUATE cycle."""
         now = datetime.now(timezone.utc).isoformat()
+        worktree = None
 
-        # Step 1: OBSERVE
-        baseline = self._run_scoreboard(self.repo_root)
-        traces = self.trace_store.read_events(
-            self.trace_store.list_runs()[-1] if self.trace_store.list_runs() else ""
-        )
-        ledger_entries = self.ledger.read_all()
-        ledger_summary = self._summarize_ledger(ledger_entries)
-
-        observation = self.observer.observe(
-            scoreboard=baseline,
-            traces=traces,
-            ledger_summary=ledger_summary,
-        )
-
-        # Step 2: HYPOTHESIZE
-        source_files = self._read_target_files(observation.weakest_dimension)
-        plan = self.strategist.strategize(
-            observation=observation,
-            source_files=source_files,
-            ledger_summary=ledger_summary,
-        )
-
-        # Step 3: IMPLEMENT
-        worktree = self.worktree_mgr.create(iteration=iteration)
         try:
+            # Step 1: OBSERVE
+            baseline = self._run_scoreboard(self.repo_root)
+            traces = self.trace_store.read_events(
+                self.trace_store.list_runs()[-1] if self.trace_store.list_runs() else ""
+            )
+            ledger_entries = self.ledger.read_all()
+            ledger_summary = self._summarize_ledger(ledger_entries)
+
+            observation = self.observer.observe(
+                scoreboard=baseline,
+                traces=traces,
+                ledger_summary=ledger_summary,
+            )
+
+            # Step 2: HYPOTHESIZE
+            source_files = self._read_target_files(observation.weakest_dimension)
+            plan = self.strategist.strategize(
+                observation=observation,
+                source_files=source_files,
+                ledger_summary=ledger_summary,
+                blocked_paths=self.config.sandbox_blocked_paths,
+            )
+
+            # Step 3: IMPLEMENT
+            worktree = self.worktree_mgr.create(iteration=iteration)
             impl_result = self.implementer.implement(plan=plan, worktree_path=worktree.path)
 
             if not impl_result.success:
@@ -148,12 +150,19 @@ class ImprovementLoop:
                 return IterationOutcome.ROLLED_BACK
 
         except Exception as e:
-            try:
-                self.worktree_mgr.rollback(worktree)
-            except Exception:
-                pass
+            if worktree is not None:
+                try:
+                    self.worktree_mgr.rollback(worktree)
+                except Exception:
+                    pass
+            # Log what we can — some vars may not be bound if early steps failed
             self._log_iteration(
-                iteration, now, observation, plan, baseline, baseline,
+                iteration,
+                now,
+                locals().get("observation"),
+                locals().get("plan"),
+                locals().get("baseline"),
+                locals().get("baseline"),
                 IterationOutcome.ABANDONED,
                 f"Exception: {e}",
             )
@@ -221,15 +230,22 @@ class ImprovementLoop:
         return ", ".join(parts) if parts else "marginal improvement"
 
     def _log_iteration(self, iteration, timestamp, observation, plan, before, after, outcome, reason):
+        obs_summary = (
+            f"{observation.weakest_dimension} at {observation.current_score:.2f}"
+            if observation else "observation failed"
+        )
+        hypothesis = plan.hypothesis if plan else "planning failed"
+        files = tuple(fc.path for fc in plan.file_changes) if plan else ()
+        empty_snapshot = ScoreboardSnapshot(iteration=iteration, dimensions=(), timestamp=timestamp)
         self.ledger.append(LedgerEntry(
             iteration=iteration,
             timestamp=timestamp,
-            observation_summary=f"{observation.weakest_dimension} at {observation.current_score:.2f}",
-            hypothesis=plan.hypothesis,
-            files_changed=tuple(fc.path for fc in plan.file_changes),
+            observation_summary=obs_summary,
+            hypothesis=hypothesis,
+            files_changed=files,
             diff="",
-            scoreboard_before=before,
-            scoreboard_after=after,
+            scoreboard_before=before or empty_snapshot,
+            scoreboard_after=after or empty_snapshot,
             outcome=outcome,
             reason=reason,
         ))

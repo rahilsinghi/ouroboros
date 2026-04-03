@@ -38,10 +38,23 @@ class BaseAgent:
         )
 
     def parse_json(self, raw: str) -> dict:
-        """Parse JSON from LLM response, handling markdown fences."""
+        """Parse JSON from LLM response, handling markdown fences and truncation."""
         cleaned = raw.strip()
         # Remove markdown code fences
         fence_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", cleaned, re.DOTALL)
         if fence_match:
             cleaned = fence_match.group(1).strip()
-        return json.loads(cleaned)
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            # Try to repair truncated JSON by closing open strings/brackets
+            repaired = cleaned
+            # Close any unterminated string
+            if repaired.count('"') % 2 != 0:
+                repaired += '"'
+            # Balance brackets
+            open_braces = repaired.count("{") - repaired.count("}")
+            open_brackets = repaired.count("[") - repaired.count("]")
+            repaired += "]" * max(0, open_brackets)
+            repaired += "}" * max(0, open_braces)
+            return json.loads(repaired)
