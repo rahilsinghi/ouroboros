@@ -77,3 +77,45 @@ class BaseAgent:
             )
             retry_response = self.call(system_prompt, retry_prompt, max_tokens=max_tokens)
             return self.parse_json(retry_response.text)
+
+
+# Pricing per 1M tokens (input, output)
+MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "claude-opus-4-6": (15.0, 75.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-5-20251001": (0.80, 4.0),
+}
+
+DEFAULT_PRICING = (3.0, 15.0)  # Sonnet as fallback
+
+
+def tokens_to_usd(input_tokens: int, output_tokens: int, model: str) -> float:
+    """Calculate USD cost from token counts and model name."""
+    input_rate, output_rate = DEFAULT_PRICING
+    for model_prefix, (i_rate, o_rate) in MODEL_PRICING.items():
+        if model.startswith(model_prefix):
+            input_rate, output_rate = i_rate, o_rate
+            break
+    return (input_tokens * input_rate / 1_000_000) + (output_tokens * output_rate / 1_000_000)
+
+
+class CostTracker:
+    """Accumulates API costs across calls."""
+
+    def __init__(self, budget_usd: float = 10.0) -> None:
+        self.budget_usd = budget_usd
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_usd = 0.0
+
+    def add(self, input_tokens: int, output_tokens: int, model: str) -> float:
+        """Record a call's token usage. Returns the cost of this call."""
+        cost = tokens_to_usd(input_tokens, output_tokens, model)
+        self.total_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
+        self.total_usd += cost
+        return cost
+
+    @property
+    def over_budget(self) -> bool:
+        return self.total_usd > self.budget_usd

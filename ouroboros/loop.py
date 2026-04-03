@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ouroboros.agents.base import CostTracker
 from ouroboros.agents.evaluator import EvalDecision, EvaluatorAgent
 from ouroboros.agents.implementer import ImplementerAgent
 from ouroboros.agents.observer import ObserverAgent
@@ -41,6 +42,7 @@ class ImprovementLoop:
         self.trace_store = TraceStore(base_dir=repo_root / ".ouroboros" / "traces")
         self.ledger = Ledger(base_dir=repo_root / ".ouroboros" / "ledger")
         self.evaluator = EvaluatorAgent(config=config)
+        self.cost_tracker = CostTracker(budget_usd=config.max_usd_per_run)
 
         self.observer = ObserverAgent(model=config.model_observer)
         self.strategist = StrategistAgent(model=config.model_strategist)
@@ -65,6 +67,11 @@ class ImprovementLoop:
             # Check time budget
             if elapsed > self.config.time_budget_minutes * 60:
                 stop_reason = "time_budget_reached"
+                break
+
+            # Check cost budget
+            if self.cost_tracker.over_budget:
+                stop_reason = "cost_budget_reached"
                 break
 
             outcome = self._run_iteration(iteration)
