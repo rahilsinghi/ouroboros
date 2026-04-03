@@ -19,15 +19,15 @@ Four-agent loop: OBSERVE → HYPOTHESIZE → IMPLEMENT → EVALUATE
 
 All models currently set to Sonnet for cost ($0.10/iteration).
 
-## 6-Dimension Scoreboard (baseline as of Phase 1.5)
+## 6-Dimension Scoreboard (as of Phase 2)
 | Dimension | Scorer | Score | Status |
 |-----------|--------|-------|--------|
-| code_quality | ruff (60%) + radon (40%) | 0.30 | Working — ruff violations dragging it down |
-| correctness | pytest pass rate | 1.00 | Fixed in Phase 1.5A — 102/102 tests pass |
+| code_quality | ruff (60%) + radon (40%) | 1.00 | Fixed: radon flag bug + all ruff violations resolved |
+| correctness | pytest pass rate | 1.00 | 104/104 tests pass |
 | efficiency | source char count vs baseline | 1.00 | Auto-calibrated (baseline=0 means self-referential) |
-| regression | previously-passing still pass | 1.00 | Working (no history = no regressions) |
+| regression | previously-passing still pass | 1.00 | Working |
 | tool_selection | routing accuracy | 1.00 | Placeholder |
-| real_world | LLM-graded eval | 0.50 | Placeholder |
+| real_world | docstring coverage (public callables) | 0.51 | Active — agents improving via autonomous merges |
 
 ## Safety-Critical Files (blocked_paths in config)
 These files CANNOT be modified by the improvement loop:
@@ -38,37 +38,36 @@ These files CANNOT be modified by the improvement loop:
 - `ouroboros/config.py` — configuration loading
 - `.git/`, `docs/`
 
-## Current Phase: 1.5 COMPLETE
-Phase 1.5 complete (102/102 tests pass, 5 real iterations ran across 2 runs).
+## Current Phase: 2 — SELF-IMPROVING
+Phase 2 complete. Ouroboros is autonomously improving its own codebase.
 
-### Phase 1.5A — Fix Feedback Loop (DONE)
-- Fixed correctness scoring (was 0.0, now 1.0) — test runner uses configured command
-- Blocked files filtered from strategist context
-- JSON retry with error feedback on parse failure
-- Cost tracking infrastructure (CostTracker + tokens_to_usd)
-- Efficiency baseline auto-calibrated
+### Phase 2 Fixes (2026-04-03)
+- **Radon flag bug fixed**: `_complexity_score()` used `-nc` (C-grade-only filter), averaging 6 functions at 15.17 instead of 129 at 3.38. Changed to `-s`. code_quality: 0.30 → 1.00.
+- **Cost tracking wired**: BaseAgent accumulates tokens; loop feeds them to CostTracker after each agent call. Costs now reported accurately (~$0.13/iteration).
+- **Implementer upgraded to Opus**: Hardened prompt (explicit JSON format), empty response handling, max_tokens 8192→16384.
+- **All ruff violations fixed**: 5 violations in cli.py/loop.py → 0. ruff_score: 0.5 → 1.0.
+- **real_world dimension activated**: Replaced 0.5 placeholder with docstring coverage scorer (public callables). Score: 0.35 → 0.51 via autonomous merges.
+- **Noise tolerance lowered**: 0.02 → 0.005. Enables merging smaller improvements like single-file docstring additions.
 
-### Phase 1.5C — Smarter Agents (DONE)
-- Strategist receives ruff violation details and radon complexity per-function
-- Implementer validates syntax (ast.parse) before committing
-- Observer has dimension-specific guidance in system prompt
-- Ledger summary includes failed hypothesis DO NOT REPEAT list
+### Results
+- **4 successful autonomous merges** in first 5 iterations after fixes
+- real_world score: 0.35 → 0.51 (+46% improvement)
+- 104/104 tests passing after autonomous changes
+- Cost: ~$0.64 for 5 iterations ($0.13/iteration avg)
 
-### Remaining Gap
-No successful merges yet. Agents propose valid improvements but:
-- Merge gate requires improvement beyond 0.02 noise tolerance
-- Sonnet implementer sometimes returns empty JSON (abandoned iterations)
-- code_quality is the main improvable dimension (0.30)
-- Next step: try with Opus implementer, or lower noise tolerance
+### Remaining Opportunities
+- real_world at 0.51 — ~43 more public callables need docstrings
+- Implementer still occasionally returns empty JSON (~20% abandon rate)
+- tool_selection dimension is still a placeholder
 
 ## Key Commands
 ```bash
 source .venv/bin/activate
-python -m pytest tests/ouroboros/ -v          # Run all tests (84 tests)
-python -m ouroboros run --iterations 1        # Run one improvement iteration
-python -m ouroboros scoreboard                # View current scores
+python -m pytest tests/ouroboros/ -v          # Run all tests (104 tests)
+python -m ouroboros run --iterations 5        # Run improvement iterations
+python -m ouroboros scoreboard                # View scores (from ledger history)
 python -m ouroboros ledger                    # View improvement history
-ruff check ouroboros/                         # Lint check
+ruff check ouroboros/                         # Lint check (should be 0 violations)
 ```
 
 ## Code Rules (Python-specific overrides)
