@@ -68,10 +68,17 @@ class BaseAgent:
         self,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int = 8192,
+        max_tokens: int = 16384,
     ) -> dict:
         """Call LLM and parse JSON response, retrying once on parse failure."""
         response = self.call(system_prompt, user_prompt, max_tokens=max_tokens)
+        if not response.text.strip():
+            # Empty response — retry with explicit instruction
+            response = self.call(
+                system_prompt,
+                user_prompt + "\n\nIMPORTANT: You MUST respond with a JSON object. Do not return empty.",
+                max_tokens=max_tokens,
+            )
         try:
             return self.parse_json(response.text)
         except json.JSONDecodeError as first_error:

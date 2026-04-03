@@ -38,7 +38,7 @@ sandbox:
 scoreboard:
   merge_gate:
     regression_rate: 1.0
-    noise_tolerance: 0.02
+    noise_tolerance: 0.005
 
 budget:
   max_usd_per_run: 10.00
