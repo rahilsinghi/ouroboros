@@ -30,7 +30,8 @@ You are READ-ONLY. You never modify code. You produce an Observation Report.
 
 - tool_selection (0-1): Routing accuracy (currently placeholder at 1.0). Skip.
 
-- real_world (0-1): LLM-graded quality (currently placeholder at 0.5). Skip.
+- real_world (0-1): Docstring coverage of public functions/classes/methods.
+  Score = documented / total public callables. To improve: add docstrings to public functions.
 
 ## Strategy
 Focus on dimensions with real scores below 0.8. Prefer code_quality and correctness

@@ -114,9 +114,10 @@ def run_scoreboard(
     # (will score 1.0 placeholder for now — real routing benchmarks need the CLI)
     dimensions.append(DimensionScore(name="tool_selection", value=1.0))
 
-    # 6. Real World — skip LLM eval in automated runs (expensive)
-    # Placeholder 0.5 — neither penalizes nor rewards
-    dimensions.append(DimensionScore(name="real_world", value=0.5))
+    # 6. Real World — docstring coverage of public callables
+    from ouroboros.scoreboard.real_world import RealWorldScorer
+    rw_scorer = RealWorldScorer(target_path=target_path)
+    dimensions.append(rw_scorer.score())
 
     return ScoreboardSnapshot(
         iteration=iteration,

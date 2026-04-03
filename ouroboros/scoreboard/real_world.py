@@ -1,21 +1,38 @@
-"""Real-world benchmark dimension — LLM-graded open-ended evaluation."""
+"""Real-world benchmark dimension — docstring coverage as code quality proxy."""
 from __future__ import annotations
+
+import ast
+from pathlib import Path
 
 from ouroboros.types import DimensionScore
 
 
 class RealWorldScorer:
-    def __init__(self, model: str = "claude-sonnet-4-6") -> None:
-        self.model = model
+    """Score based on docstring coverage of public functions/classes/methods."""
 
-    def score(self, evaluations: list[dict[str, float]]) -> DimensionScore:
-        """Score from LLM evaluations. Each eval has helpfulness, accuracy, completeness (1-5)."""
-        if not evaluations:
-            return DimensionScore(name="real_world", value=0.0)
-        total = 0.0
-        for ev in evaluations:
-            helpfulness = (ev.get("helpfulness", 1) - 1) / 4
-            accuracy = (ev.get("accuracy", 1) - 1) / 4
-            completeness = (ev.get("completeness", 1) - 1) / 4
-            total += (helpfulness + accuracy + completeness) / 3
-        return DimensionScore(name="real_world", value=total / len(evaluations))
+    def __init__(self, target_path: Path) -> None:
+        self.target_path = target_path
+
+    def score(self) -> DimensionScore:
+        """Score = fraction of public callables that have docstrings."""
+        total = 0
+        documented = 0
+
+        for py_file in self.target_path.rglob("*.py"):
+            if "__pycache__" in str(py_file):
+                continue
+            try:
+                tree = ast.parse(py_file.read_text())
+            except (SyntaxError, OSError):
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    if node.name.startswith("_"):
+                        continue
+                    total += 1
+                    if ast.get_docstring(node):
+                        documented += 1
+
+        if total == 0:
+            return DimensionScore(name="real_world", value=1.0)
+        return DimensionScore(name="real_world", value=documented / total)
