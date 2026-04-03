@@ -114,11 +114,17 @@ class ImprovementLoop:
 
             # Step 2: HYPOTHESIZE
             source_files = self._read_target_files(observation.weakest_dimension)
+            # Get code quality details for strategist context
+            from ouroboros.scoreboard.code_quality import CodeQualityScorer
+            cq_details = CodeQualityScorer(
+                target_path=self.repo_root / self.config.target_path
+            ).details()
             plan = self.strategist.strategize(
                 observation=observation,
                 source_files=source_files,
                 ledger_summary=ledger_summary,
                 blocked_paths=self.config.sandbox_blocked_paths,
+                quality_details=cq_details,
             )
 
             # Step 3: IMPLEMENT

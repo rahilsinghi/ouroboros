@@ -25,6 +25,40 @@ class CodeQualityScorer:
         composite = (ruff_score * 0.6) + (complexity_score * 0.4)
         return DimensionScore(name="code_quality", value=composite)
 
+    def details(self) -> str:
+        """Return human-readable ruff violations and complexity info."""
+        parts: list[str] = []
+
+        try:
+            result = subprocess.run(
+                ["ruff", "check", str(self.target_path), "--output-format", "text"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.stdout.strip():
+                parts.append(f"### Ruff Violations\n```\n{result.stdout.strip()}\n```")
+            else:
+                parts.append("### Ruff Violations\nNone")
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            parts.append("### Ruff Violations\n(ruff not available)")
+
+        try:
+            result = subprocess.run(
+                ["radon", "cc", str(self.target_path), "-a", "-s"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.stdout.strip():
+                parts.append(f"### Complexity Report\n```\n{result.stdout.strip()}\n```")
+            else:
+                parts.append("### Complexity Report\nNo functions found")
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            parts.append("### Complexity Report\n(radon not available)")
+
+        return "\n\n".join(parts)
+
     def _ruff_score(self) -> float:
         """Score based on lint violations. 0 violations = 1.0."""
         try:
