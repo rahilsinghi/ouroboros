@@ -58,3 +58,22 @@ class BaseAgent:
             repaired += "]" * max(0, open_brackets)
             repaired += "}" * max(0, open_braces)
             return json.loads(repaired)
+
+    def call_with_json_retry(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 8192,
+    ) -> dict:
+        """Call LLM and parse JSON response, retrying once on parse failure."""
+        response = self.call(system_prompt, user_prompt, max_tokens=max_tokens)
+        try:
+            return self.parse_json(response.text)
+        except json.JSONDecodeError as first_error:
+            retry_prompt = (
+                f"Your previous response was invalid JSON. Error: {first_error}\n\n"
+                f"Original request:\n{user_prompt}\n\n"
+                "Please respond with ONLY the JSON object, no prose or markdown."
+            )
+            retry_response = self.call(system_prompt, retry_prompt, max_tokens=max_tokens)
+            return self.parse_json(retry_response.text)

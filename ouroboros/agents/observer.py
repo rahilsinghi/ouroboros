@@ -38,11 +38,10 @@ class ObserverAgent:
     ) -> ObservationReport:
         """Analyze scoreboard and traces, return an ObservationReport."""
         user_prompt = self._build_prompt(scoreboard, traces, ledger_summary)
-        response = self.agent.call(
+        data = self.agent.call_with_json_retry(
             system_prompt=OBSERVER_SYSTEM_PROMPT,
             user_prompt=user_prompt,
         )
-        data = self.agent.parse_json(response.text)
         return ObservationReport(
             weakest_dimension=data["weakest_dimension"],
             current_score=data["current_score"],

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from ouroboros.agents.base import BaseAgent
 from ouroboros.types import ChangePlan, FileChange, ObservationReport
 
@@ -51,11 +49,10 @@ class StrategistAgent:
     ) -> ChangePlan:
         """Propose a change plan based on the observation."""
         user_prompt = self._build_prompt(observation, source_files, ledger_summary, blocked_paths)
-        response = self.agent.call(
+        data = self.agent.call_with_json_retry(
             system_prompt=STRATEGIST_SYSTEM_PROMPT,
             user_prompt=user_prompt,
         )
-        data = self.agent.parse_json(response.text)
         return ChangePlan(
             hypothesis=data["hypothesis"],
             target_dimension=data["target_dimension"],

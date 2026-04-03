@@ -61,11 +61,10 @@ class ImplementerAgent:
                 source_files[fc.path] = ""
 
         user_prompt = self._build_prompt(plan, source_files)
-        response = self.agent.call(
+        data = self.agent.call_with_json_retry(
             system_prompt=IMPLEMENTER_SYSTEM_PROMPT,
             user_prompt=user_prompt,
         )
-        data = self.agent.parse_json(response.text)
         files_written = data.get("files_written", {})
 
         # Validate no blocked paths in response
