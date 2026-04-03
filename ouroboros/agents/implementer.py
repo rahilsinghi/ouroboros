@@ -18,15 +18,17 @@ source code of files to modify. You write the complete new content for each file
 
 You ONLY write code. You do not analyze, question, or evaluate the plan.
 
-Respond with a JSON object:
-{
-  "files_written": {
-    "path/to/file.py": "<complete file content after changes>"
-  }
-}
+You MUST respond with ONLY a JSON object — no prose, no explanation, no markdown fences.
+The JSON object MUST have a "files_written" key mapping file paths to complete file contents.
 
-IMPORTANT: Write the COMPLETE file content, not just the changed parts.
-Only modify files specified in the Change Plan. Do not modify any other files."""
+Example response format:
+{"files_written": {"path/to/file.py": "# complete file content\\nimport ...\\n"}}
+
+CRITICAL RULES:
+1. ALWAYS return valid JSON with "files_written" key. NEVER return empty or non-JSON.
+2. Write the COMPLETE file content, not just changed parts.
+3. Only modify files specified in the Change Plan.
+4. Ensure all Python files have valid syntax."""
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,12 @@ class ImplementerAgent:
             user_prompt=user_prompt,
         )
         files_written = data.get("files_written", {})
+        if not files_written:
+            return ImplementResult(
+                success=False,
+                files_written=(),
+                error="Implementer returned empty files_written",
+            )
 
         # Validate no blocked paths in response
         for path in files_written:

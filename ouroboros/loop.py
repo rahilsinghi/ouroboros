@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -98,6 +98,19 @@ class ImprovementLoop:
             total_output_tokens=self.cost_tracker.total_output_tokens,
         )
 
+    def _track_agent_cost(self, agent_wrapper: object) -> None:
+        """Read accumulated tokens from an agent wrapper and feed into cost tracker."""
+        from ouroboros.agents.base import BaseAgent
+        agent = getattr(agent_wrapper, "agent", None)
+        if not isinstance(agent, BaseAgent):
+            return
+        input_t = agent.total_input_tokens
+        output_t = agent.total_output_tokens
+        if input_t > 0 or output_t > 0:
+            self.cost_tracker.add(input_t, output_t, agent.model)
+            agent.total_input_tokens = 0
+            agent.total_output_tokens = 0
+
     def _run_iteration(self, iteration: int) -> IterationOutcome:
         """Execute one full OBSERVE → HYPOTHESIZE → IMPLEMENT → EVALUATE cycle."""
         now = datetime.now(timezone.utc).isoformat()
@@ -117,6 +130,7 @@ class ImprovementLoop:
                 traces=traces,
                 ledger_summary=ledger_summary,
             )
+            self._track_agent_cost(self.observer)
 
             # Step 2: HYPOTHESIZE
             source_files = self._read_target_files(observation.weakest_dimension)
@@ -132,10 +146,12 @@ class ImprovementLoop:
                 blocked_paths=self.config.sandbox_blocked_paths,
                 quality_details=cq_details,
             )
+            self._track_agent_cost(self.strategist)
 
             # Step 3: IMPLEMENT
             worktree = self.worktree_mgr.create(iteration=iteration)
             impl_result = self.implementer.implement(plan=plan, worktree_path=worktree.path)
+            self._track_agent_cost(self.implementer)
 
             if not impl_result.success:
                 self.worktree_mgr.rollback(worktree)

@@ -49,3 +49,13 @@ class TestCodeQualityScorer:
         scorer = CodeQualityScorer(target_path=tmp_path)
         score = scorer.score()
         assert score.value == 1.0
+
+    def test_complexity_score_uses_all_functions(self, clean_python_dir: Path):
+        """Verify complexity averaging includes all functions, not just C+ grade."""
+        scorer = CodeQualityScorer(target_path=clean_python_dir)
+        score = scorer._complexity_score()
+        # Simple functions should score 1.0 (avg CC < 5)
+        assert score == 1.0, (
+            f"Low-complexity code should get 1.0, got {score}. "
+            "Likely averaging only high-complexity functions."
+        )

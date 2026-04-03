@@ -21,6 +21,8 @@ class BaseAgent:
         self.model = model
         self.role = role
         self.timeout_seconds = timeout_seconds
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
 
     def call(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> AgentResponse:
         """Call the LLM with system and user prompts."""
@@ -31,11 +33,14 @@ class BaseAgent:
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
-        return AgentResponse(
+        agent_response = AgentResponse(
             text=response.content[0].text,
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
         )
+        self.total_input_tokens += agent_response.input_tokens
+        self.total_output_tokens += agent_response.output_tokens
+        return agent_response
 
     def parse_json(self, raw: str) -> dict:
         """Parse JSON from LLM response, handling markdown fences and truncation."""

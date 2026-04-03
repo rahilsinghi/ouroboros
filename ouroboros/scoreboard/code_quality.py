@@ -82,7 +82,7 @@ class CodeQualityScorer:
         """Score based on cyclomatic complexity. Average CC < 5 = 1.0."""
         try:
             result = subprocess.run(
-                ["radon", "cc", str(self.target_path), "-a", "-nc"],
+                ["radon", "cc", str(self.target_path), "-a", "-s"],
                 capture_output=True,
                 text=True,
                 timeout=30,

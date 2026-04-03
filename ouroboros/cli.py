@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import sys
-from dataclasses import asdict
 from pathlib import Path
 
-from ouroboros.config import DEFAULT_CONFIG, load_config
+from ouroboros.config import load_config
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,7 +105,7 @@ def _cmd_run(config, args):
     loop = ImprovementLoop(config=config, repo_root=repo_root)
     print(f"Starting Ouroboros improvement loop (max {config.max_iterations} iterations)...")
     result = loop.run()
-    print(f"\nLoop complete:")
+    print("\nLoop complete:")
     print(f"  Iterations run:       {result.iterations_run}")
     print(f"  Merged:               {result.iterations_merged}")
     print(f"  Rolled back:          {result.iterations_rolled_back}")

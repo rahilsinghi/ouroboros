@@ -61,3 +61,25 @@ class TestCallWithJsonRetry:
             self.agent.call_with_json_retry(
                 system_prompt="sys", user_prompt="user"
             )
+
+
+class TestTokenAccumulation:
+    def test_call_accumulates_tokens(self):
+        agent = BaseAgent(model="test", role="test", timeout_seconds=10)
+        assert agent.total_input_tokens == 0
+        assert agent.total_output_tokens == 0
+
+        with patch("ouroboros.agents.base.Anthropic") as mock_cls:
+            mock_client = mock_cls.return_value
+            mock_response = mock_client.messages.create.return_value
+            mock_response.content = [type("C", (), {"text": "hi"})()]
+            mock_response.usage = type("U", (), {"input_tokens": 100, "output_tokens": 50})()
+
+            agent.call("sys", "user")
+            assert agent.total_input_tokens == 100
+            assert agent.total_output_tokens == 50
+
+            mock_response.usage = type("U", (), {"input_tokens": 200, "output_tokens": 75})()
+            agent.call("sys", "user2")
+            assert agent.total_input_tokens == 300
+            assert agent.total_output_tokens == 125
