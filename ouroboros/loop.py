@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -268,13 +268,18 @@ class ImprovementLoop:
         files: dict[str, str] = {}
         if not target_dir.exists():
             return files
+        blocked = set(self.config.sandbox_blocked_paths)
         for py_file in sorted(target_dir.rglob("*.py")):
             relative = py_file.relative_to(self.repo_root)
+            rel_str = str(relative)
+            # Skip files matching blocked paths
+            if any(rel_str == bp or rel_str.startswith(bp.rstrip("/") + "/") for bp in blocked):
+                continue
             try:
                 content = py_file.read_text()
                 # Skip very large files and __pycache__
                 if len(content) < 10_000 and "__pycache__" not in str(py_file):
-                    files[str(relative)] = content
+                    files[rel_str] = content
             except (OSError, UnicodeDecodeError):
                 continue
             # Cap at 20 files to stay within LLM context
@@ -337,7 +342,6 @@ class ImprovementLoop:
         git_diff: str,
     ) -> None:
         """Write a telemetry record for this iteration."""
-        from ouroboros.agents.base import BaseAgent
         obs_agent = getattr(self.observer, "agent", None)
         strat_agent = getattr(self.strategist, "agent", None)
         impl_agent = getattr(self.implementer, "agent", None)
