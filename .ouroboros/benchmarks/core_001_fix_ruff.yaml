@@ -1,0 +1,10 @@
+name: fix_ruff_violation
+type: core
+description: "Fix a ruff F841 violation (unused variable) in a prepared file."
+setup_file: |
+  def compute(x: int) -> int:
+      unused = x * 2
+      return x + 1
+setup_path: "ouroboros/_benchmark_target.py"
+expected_check: "ruff_clean"
+target_dimension: "code_quality"

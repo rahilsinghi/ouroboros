@@ -1,0 +1,27 @@
+name: reduce_complexity
+type: core
+description: "Refactor the process() function to reduce cyclomatic complexity from C to A/B."
+setup_file: |
+  def process(x, y, z, mode):
+      if mode == "a":
+          if x > 0:
+              if y > 0:
+                  return x + y
+              else:
+                  return x - y
+          else:
+              if z > 0:
+                  return z
+              else:
+                  return 0
+      elif mode == "b":
+          if x > 0:
+              return x * 2
+          else:
+              return -x
+      else:
+          return 0
+setup_path: "ouroboros/_benchmark_target.py"
+expected_check: "low_complexity"
+target_function: "process"
+target_dimension: "code_quality"
