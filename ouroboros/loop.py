@@ -17,6 +17,8 @@ from ouroboros.history.ledger import Ledger
 from ouroboros.sandbox.executor import SandboxExecutor
 from ouroboros.sandbox.worktree import WorktreeManager
 from ouroboros.traces.store import TraceStore
+from ouroboros.telemetry.types import AgentTokens, TelemetryRecord
+from ouroboros.telemetry.writer import TelemetryWriter
 from ouroboros.types import (
     IterationOutcome,
     LedgerEntry,
@@ -50,6 +52,10 @@ class ImprovementLoop:
                 "strategist": STRATEGIST_SYSTEM_PROMPT,
                 "implementer": IMPLEMENTER_SYSTEM_PROMPT,
             },
+        )
+
+        self.telemetry_writer = TelemetryWriter(
+            archive_dir=repo_root / ".ouroboros" / "archive",
         )
 
         obs_prompt = self.prompt_store.load("observer")
@@ -104,6 +110,9 @@ class ImprovementLoop:
         """Execute one full OBSERVE → HYPOTHESIZE → IMPLEMENT → EVALUATE cycle."""
         now = datetime.now(timezone.utc).isoformat()
         worktree = None
+        obs_tokens = (0, 0, 0.0)
+        strat_tokens = (0, 0, 0.0)
+        impl_tokens = (0, 0, 0.0)
 
         try:
             # Step 1: OBSERVE
@@ -119,6 +128,7 @@ class ImprovementLoop:
                 traces=traces,
                 ledger_summary=ledger_summary,
             )
+            obs_tokens = self._read_agent_tokens(self.observer)
 
             # Step 2: HYPOTHESIZE
             source_files = self._read_target_files(observation.weakest_dimension)
@@ -128,10 +138,12 @@ class ImprovementLoop:
                 ledger_summary=ledger_summary,
                 blocked_paths=self.config.sandbox_blocked_paths,
             )
+            strat_tokens = self._read_agent_tokens(self.strategist)
 
             # Step 3: IMPLEMENT
             worktree = self.worktree_mgr.create(iteration=iteration)
             impl_result = self.implementer.implement(plan=plan, worktree_path=worktree.path)
+            impl_tokens = self._read_agent_tokens(self.implementer)
 
             if not impl_result.success:
                 self.worktree_mgr.rollback(worktree)
@@ -140,7 +152,37 @@ class ImprovementLoop:
                     IterationOutcome.ROLLED_BACK,
                     f"Implementation failed: {impl_result.error}",
                 )
+                self._write_telemetry(
+                    iteration, now, "ROLLED_BACK", 0.0,
+                    impl_result.error, "", obs_tokens, strat_tokens, impl_tokens,
+                    impl_result.files_written, "",
+                )
                 return IterationOutcome.ROLLED_BACK
+
+            # Step 3.5: SAFETY INVARIANTS
+            from ouroboros.scoreboard.invariants import SafetyInvariants
+            invariants = SafetyInvariants()
+            invariant_result = invariants.check(
+                before_test_count=0,
+                after_test_count=0,
+                before_ruff_violations=0,
+                after_ruff_violations=0,
+                files_written=list(impl_result.files_written),
+            )
+
+            if not invariant_result.passed:
+                self.worktree_mgr.rollback(worktree)
+                self._log_iteration(
+                    iteration, now, observation, plan, baseline, baseline,
+                    IterationOutcome.KILLED,
+                    f"Safety invariant violated: {invariant_result.violation}",
+                )
+                self._write_telemetry(
+                    iteration, now, "KILLED", 0.0,
+                    invariant_result.violation, "", obs_tokens, strat_tokens, impl_tokens,
+                    impl_result.files_written, "",
+                )
+                return IterationOutcome.KILLED
 
             # Step 4: EVALUATE
             after = self._run_scoreboard(worktree.path)
@@ -154,6 +196,11 @@ class ImprovementLoop:
                     IterationOutcome.MERGED,
                     self._describe_improvement(baseline, after),
                 )
+                self._write_telemetry(
+                    iteration, now, "MERGED", self._eval_score(baseline, after),
+                    "", "", obs_tokens, strat_tokens, impl_tokens,
+                    impl_result.files_written, diff,
+                )
                 return IterationOutcome.MERGED
             else:
                 self.worktree_mgr.rollback(worktree)
@@ -161,6 +208,11 @@ class ImprovementLoop:
                     iteration, now, observation, plan, baseline, after,
                     IterationOutcome.ROLLED_BACK,
                     "Merge gate failed — no improvement or regression detected",
+                )
+                self._write_telemetry(
+                    iteration, now, "ROLLED_BACK", self._eval_score(baseline, after),
+                    "no improvement", "", obs_tokens, strat_tokens, impl_tokens,
+                    impl_result.files_written, diff,
                 )
                 return IterationOutcome.ROLLED_BACK
 
@@ -170,7 +222,6 @@ class ImprovementLoop:
                     self.worktree_mgr.rollback(worktree)
                 except Exception:
                     pass
-            # Log what we can — some vars may not be bound if early steps failed
             self._log_iteration(
                 iteration,
                 now,
@@ -180,6 +231,10 @@ class ImprovementLoop:
                 locals().get("baseline"),
                 IterationOutcome.ABANDONED,
                 f"Exception: {e}",
+            )
+            self._write_telemetry(
+                iteration, now, "ABANDONED", 0.0,
+                str(e), "", obs_tokens, strat_tokens, impl_tokens, (), "",
             )
             return IterationOutcome.ABANDONED
 
@@ -235,6 +290,15 @@ class ImprovementLoop:
             lines.append(f"  #{e.iteration} [{e.outcome.value}]: {e.hypothesis} — {e.reason}")
         return "\n".join(lines)
 
+    def _eval_score(self, before: ScoreboardSnapshot, after: ScoreboardSnapshot) -> float:
+        """Compute the net improvement score (sum of dimension deltas)."""
+        total = 0.0
+        for ad in after.dimensions:
+            bd = before.get(ad.name)
+            if bd:
+                total += ad.value - bd.value
+        return total
+
     def _describe_improvement(self, before: ScoreboardSnapshot, after: ScoreboardSnapshot) -> str:
         parts = []
         for ad in after.dimensions:
@@ -243,6 +307,65 @@ class ImprovementLoop:
                 delta = ad.value - bd.value
                 parts.append(f"{ad.name} +{delta:.2f}")
         return ", ".join(parts) if parts else "marginal improvement"
+
+    def _read_agent_tokens(self, agent_wrapper: object) -> tuple[int, int, float]:
+        """Read accumulated tokens from an agent wrapper. Returns (in, out, cost)."""
+        from ouroboros.agents.base import BaseAgent
+        agent = getattr(agent_wrapper, "agent", None)
+        if not isinstance(agent, BaseAgent):
+            return 0, 0, 0.0
+        input_t = agent.total_input_tokens
+        output_t = agent.total_output_tokens
+        cost = 0.0
+        if input_t or output_t:
+            # Rough cost estimate: $3/M input, $15/M output for Opus; $3/M, $15/M for Sonnet
+            cost = (input_t * 3 + output_t * 15) / 1_000_000
+        return input_t, output_t, cost
+
+    def _write_telemetry(
+        self,
+        iteration: int,
+        timestamp: str,
+        outcome: str,
+        eval_score: float,
+        failure_reason: str,
+        traceback_output: str,
+        obs_tokens: tuple[int, int, float],
+        strat_tokens: tuple[int, int, float],
+        impl_tokens: tuple[int, int, float],
+        files_changed: tuple[str, ...],
+        git_diff: str,
+    ) -> None:
+        """Write a telemetry record for this iteration."""
+        from ouroboros.agents.base import BaseAgent
+        obs_agent = getattr(self.observer, "agent", None)
+        strat_agent = getattr(self.strategist, "agent", None)
+        impl_agent = getattr(self.implementer, "agent", None)
+
+        record = TelemetryRecord(
+            run_id=f"{timestamp.replace(':', '-').replace('+', '')[:19]}_iter{iteration:03d}",
+            iteration=iteration,
+            timestamp=timestamp,
+            prompt_observer=f"v{self.prompt_store.current_version('observer') or 1}",
+            prompt_strategist=f"v{self.prompt_store.current_version('strategist') or 1}",
+            prompt_implementer=f"v{self.prompt_store.current_version('implementer') or 1}",
+            observer_output=getattr(obs_agent, "last_response_text", "") if obs_agent else "",
+            strategist_output=getattr(strat_agent, "last_response_text", "") if strat_agent else "",
+            implementer_output=getattr(impl_agent, "last_response_text", "") if impl_agent else "",
+            tokens_observer=AgentTokens(input=obs_tokens[0], output=obs_tokens[1], cost_usd=obs_tokens[2]),
+            tokens_strategist=AgentTokens(input=strat_tokens[0], output=strat_tokens[1], cost_usd=strat_tokens[2]),
+            tokens_implementer=AgentTokens(input=impl_tokens[0], output=impl_tokens[1], cost_usd=impl_tokens[2]),
+            files_changed=files_changed,
+            git_diff=git_diff,
+            eval_score=eval_score,
+            outcome=outcome,
+            failure_reason=failure_reason,
+            traceback_output=traceback_output,
+            cost_usd=obs_tokens[2] + strat_tokens[2] + impl_tokens[2],
+            input_tokens=obs_tokens[0] + strat_tokens[0] + impl_tokens[0],
+            output_tokens=obs_tokens[1] + strat_tokens[1] + impl_tokens[1],
+        )
+        self.telemetry_writer.write(record)
 
     def _log_iteration(self, iteration, timestamp, observation, plan, before, after, outcome, reason):
         obs_summary = (
