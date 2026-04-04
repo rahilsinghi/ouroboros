@@ -3,10 +3,17 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from ouroboros.types import DimensionScore
+
+
+def _tool_path(name: str) -> str:
+    """Resolve tool binary, preferring venv over system PATH."""
+    return shutil.which(name) or str(Path(sys.executable).parent / name)
 
 
 class CodeQualityScorer:
@@ -31,7 +38,7 @@ class CodeQualityScorer:
 
         try:
             result = subprocess.run(
-                ["ruff", "check", str(self.target_path), "--output-format", "text"],
+                [_tool_path("ruff"), "check", str(self.target_path), "--output-format", "text"],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -45,7 +52,7 @@ class CodeQualityScorer:
 
         try:
             result = subprocess.run(
-                ["radon", "cc", str(self.target_path), "-a", "-s"],
+                [_tool_path("radon"), "cc", str(self.target_path), "-a", "-s"],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -63,7 +70,7 @@ class CodeQualityScorer:
         """Score based on lint violations. 0 violations = 1.0."""
         try:
             result = subprocess.run(
-                ["ruff", "check", str(self.target_path), "--output-format", "json"],
+                [_tool_path("ruff"), "check", str(self.target_path), "--output-format", "json"],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -82,7 +89,7 @@ class CodeQualityScorer:
         """Score based on cyclomatic complexity. Average CC < 5 = 1.0."""
         try:
             result = subprocess.run(
-                ["radon", "cc", str(self.target_path), "-a", "-s"],
+                [_tool_path("radon"), "cc", str(self.target_path), "-a", "-s"],
                 capture_output=True,
                 text=True,
                 timeout=30,

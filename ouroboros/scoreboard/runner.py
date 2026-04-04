@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -131,6 +132,9 @@ def _run_tests(target_path: Path, test_command: str) -> tuple[dict[str, bool], i
     try:
         cmd_parts = [p for p in shlex.split(test_command) if p not in ("-v", "--verbose")]
         cmd_parts += ["--tb=no", "-q"]
+        # Resolve bare "python" to current interpreter so venv tools are found
+        if cmd_parts and cmd_parts[0] in ("python", "python3"):
+            cmd_parts[0] = sys.executable
         # Run from repo root (parent of target_path) so relative test paths resolve
         repo_root = target_path.parent if target_path.name != "." else target_path
         result = subprocess.run(
