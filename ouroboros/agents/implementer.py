@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,11 +63,10 @@ class ImplementerAgent:
                 source_files[fc.path] = ""
 
         user_prompt = self._build_prompt(plan, source_files)
-        response = self.agent.call(
+        data = self.agent.call_with_json_retry(
             system_prompt=self.system_prompt,
             user_prompt=user_prompt,
         )
-        data = self.agent.parse_json(response.text)
         files_written = data.get("files_written", {})
 
         # Validate no blocked paths in response
@@ -77,6 +77,15 @@ class ImplementerAgent:
                     files_written=(),
                     error=f"Blocked path in response: {path}",
                 )
+
+        # Validate syntax of all Python files before writing
+        validation_error = self._validate_files(files_written)
+        if validation_error:
+            return ImplementResult(
+                success=False,
+                files_written=(),
+                error=validation_error,
+            )
 
         # Write files to worktree
         written: list[str] = []
@@ -100,6 +109,17 @@ class ImplementerAgent:
             )
 
         return ImplementResult(success=True, files_written=tuple(written))
+
+    @staticmethod
+    def _validate_files(files_written: dict[str, str]) -> str:
+        """Validate Python files for syntax errors. Returns error message or empty string."""
+        for path, content in files_written.items():
+            if path.endswith(".py"):
+                try:
+                    ast.parse(content)
+                except SyntaxError as e:
+                    return f"SyntaxError in {path}: {e}"
+        return ""
 
     def _build_prompt(self, plan: ChangePlan, source_files: dict[str, str]) -> str:
         file_sections = "\n\n".join(
