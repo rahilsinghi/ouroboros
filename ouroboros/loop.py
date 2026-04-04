@@ -8,9 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ouroboros.agents.evaluator import EvalDecision, EvaluatorAgent
-from ouroboros.agents.implementer import ImplementerAgent
-from ouroboros.agents.observer import ObserverAgent
-from ouroboros.agents.strategist import StrategistAgent
+from ouroboros.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT, ImplementerAgent
+from ouroboros.agents.observer import OBSERVER_SYSTEM_PROMPT, ObserverAgent
+from ouroboros.agents.strategist import STRATEGIST_SYSTEM_PROMPT, StrategistAgent
+from ouroboros.meta.prompt_store import PromptStore
 from ouroboros.config import OuroborosConfig
 from ouroboros.history.ledger import Ledger
 from ouroboros.sandbox.executor import SandboxExecutor
@@ -42,11 +43,25 @@ class ImprovementLoop:
         self.ledger = Ledger(base_dir=repo_root / ".ouroboros" / "ledger")
         self.evaluator = EvaluatorAgent(config=config)
 
-        self.observer = ObserverAgent(model=config.model_observer)
-        self.strategist = StrategistAgent(model=config.model_strategist)
+        self.prompt_store = PromptStore(
+            prompts_dir=repo_root / ".ouroboros" / "prompts",
+            defaults={
+                "observer": OBSERVER_SYSTEM_PROMPT,
+                "strategist": STRATEGIST_SYSTEM_PROMPT,
+                "implementer": IMPLEMENTER_SYSTEM_PROMPT,
+            },
+        )
+
+        obs_prompt = self.prompt_store.load("observer")
+        strat_prompt = self.prompt_store.load("strategist")
+        impl_prompt = self.prompt_store.load("implementer")
+
+        self.observer = ObserverAgent(model=config.model_observer, system_prompt=obs_prompt)
+        self.strategist = StrategistAgent(model=config.model_strategist, system_prompt=strat_prompt)
         self.implementer = ImplementerAgent(
             model=config.model_implementer,
             executor=self.executor,
+            system_prompt=impl_prompt,
         )
 
     def run(self) -> LoopResult:

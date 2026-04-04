@@ -39,8 +39,9 @@ Reference specific functions, line numbers, and logic."""
 
 
 class StrategistAgent:
-    def __init__(self, model: str = "claude-opus-4-6") -> None:
+    def __init__(self, model: str = "claude-opus-4-6", system_prompt: str = "") -> None:
         self.agent = BaseAgent(model=model, role="strategist", timeout_seconds=180)
+        self.system_prompt = system_prompt or STRATEGIST_SYSTEM_PROMPT
 
     def strategize(
         self,
@@ -52,7 +53,7 @@ class StrategistAgent:
         """Propose a change plan based on the observation."""
         user_prompt = self._build_prompt(observation, source_files, ledger_summary, blocked_paths)
         response = self.agent.call(
-            system_prompt=STRATEGIST_SYSTEM_PROMPT,
+            system_prompt=self.system_prompt,
             user_prompt=user_prompt,
         )
         data = self.agent.parse_json(response.text)

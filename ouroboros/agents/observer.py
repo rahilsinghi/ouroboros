@@ -27,8 +27,9 @@ Be specific in patterns — identify what categories of inputs fail and why."""
 
 
 class ObserverAgent:
-    def __init__(self, model: str = "claude-sonnet-4-6") -> None:
+    def __init__(self, model: str = "claude-sonnet-4-6", system_prompt: str = "") -> None:
         self.agent = BaseAgent(model=model, role="observer", timeout_seconds=120)
+        self.system_prompt = system_prompt or OBSERVER_SYSTEM_PROMPT
 
     def observe(
         self,
@@ -39,7 +40,7 @@ class ObserverAgent:
         """Analyze scoreboard and traces, return an ObservationReport."""
         user_prompt = self._build_prompt(scoreboard, traces, ledger_summary)
         response = self.agent.call(
-            system_prompt=OBSERVER_SYSTEM_PROMPT,
+            system_prompt=self.system_prompt,
             user_prompt=user_prompt,
         )
         data = self.agent.parse_json(response.text)

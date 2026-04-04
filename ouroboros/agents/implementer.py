@@ -36,9 +36,10 @@ class ImplementResult:
 
 
 class ImplementerAgent:
-    def __init__(self, model: str, executor: SandboxExecutor) -> None:
+    def __init__(self, model: str, executor: SandboxExecutor, system_prompt: str = "") -> None:
         self.agent = BaseAgent(model=model, role="implementer", timeout_seconds=300)
         self.executor = executor
+        self.system_prompt = system_prompt or IMPLEMENTER_SYSTEM_PROMPT
 
     def implement(self, plan: ChangePlan, worktree_path: Path) -> ImplementResult:
         """Write code changes to the worktree based on the plan."""
@@ -62,7 +63,7 @@ class ImplementerAgent:
 
         user_prompt = self._build_prompt(plan, source_files)
         response = self.agent.call(
-            system_prompt=IMPLEMENTER_SYSTEM_PROMPT,
+            system_prompt=self.system_prompt,
             user_prompt=user_prompt,
         )
         data = self.agent.parse_json(response.text)
