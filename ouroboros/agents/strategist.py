@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from ouroboros.agents.base import BaseAgent
 from ouroboros.types import ChangePlan, FileChange, ObservationReport
 

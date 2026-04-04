@@ -7,7 +7,7 @@ from pathlib import Path
 from ouroboros.agents.base import BaseAgent
 from ouroboros.meta.benchmark_gen import BenchmarkGenerator, load_benchmark_tasks
 from ouroboros.meta.prompt_store import PromptStore
-from ouroboros.meta.tournament import Tournament, score_task_result
+from ouroboros.meta.tournament import Tournament  # noqa: F401
 from ouroboros.telemetry.reader import TelemetryReader
 
 

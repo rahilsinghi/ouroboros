@@ -45,7 +45,7 @@ def _check_ruff_clean(code: str) -> float:
         )
         if result.returncode == 0:
             return 1.0
-        violations = len([l for l in result.stdout.splitlines() if l.strip()])
+        violations = len([line for line in result.stdout.splitlines() if line.strip()])
         return 0.5 if violations <= 1 else 0.0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return 0.5

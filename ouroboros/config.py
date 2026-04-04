@@ -40,6 +40,11 @@ class OuroborosConfig:
     budget_warn_percentage: int = 80
     dashboard_web_port: int = 8420
     dashboard_refresh_seconds: int = 5
+    meta_model: str = "claude-opus-4-6"
+    meta_tournament_tasks: int = 5
+    meta_rotating_refresh: int = 10
+    meta_prompt_bloat_limit: float = 1.2
+    meta_min_records: int = 2
 
     def with_overrides(self, overrides: dict[str, Any]) -> OuroborosConfig:
         valid = {k: v for k, v in overrides.items() if hasattr(self, k)}
@@ -105,5 +110,17 @@ def load_config(path: Path) -> OuroborosConfig:
         flat["max_usd_per_iteration"] = budget["max_usd_per_iteration"]
     if "warn_at_percentage" in budget:
         flat["budget_warn_percentage"] = budget["warn_at_percentage"]
+
+    meta = raw.get("meta", {})
+    if "model" in meta:
+        flat["meta_model"] = meta["model"]
+    if "tournament_tasks" in meta:
+        flat["meta_tournament_tasks"] = meta["tournament_tasks"]
+    if "rotating_task_refresh" in meta:
+        flat["meta_rotating_refresh"] = meta["rotating_task_refresh"]
+    if "prompt_bloat_limit" in meta:
+        flat["meta_prompt_bloat_limit"] = meta["prompt_bloat_limit"]
+    if "min_telemetry_records" in meta:
+        flat["meta_min_records"] = meta["min_telemetry_records"]
 
     return DEFAULT_CONFIG.with_overrides(flat)
