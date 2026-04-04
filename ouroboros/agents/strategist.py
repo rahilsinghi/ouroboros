@@ -37,8 +37,9 @@ Reference specific functions, line numbers, and logic."""
 
 
 class StrategistAgent:
-    def __init__(self, model: str = "claude-opus-4-6") -> None:
+    def __init__(self, model: str = "claude-opus-4-6", system_prompt: str = "") -> None:
         self.agent = BaseAgent(model=model, role="strategist", timeout_seconds=180)
+        self.system_prompt = system_prompt or STRATEGIST_SYSTEM_PROMPT
 
     def strategize(
         self,
@@ -46,14 +47,14 @@ class StrategistAgent:
         source_files: dict[str, str],
         ledger_summary: str,
         blocked_paths: tuple[str, ...] = (),
-        quality_details: str = "",
     ) -> ChangePlan:
         """Propose a change plan based on the observation."""
-        user_prompt = self._build_prompt(observation, source_files, ledger_summary, blocked_paths, quality_details)
-        data = self.agent.call_with_json_retry(
-            system_prompt=STRATEGIST_SYSTEM_PROMPT,
+        user_prompt = self._build_prompt(observation, source_files, ledger_summary, blocked_paths)
+        response = self.agent.call(
+            system_prompt=self.system_prompt,
             user_prompt=user_prompt,
         )
+        data = self.agent.parse_json(response.text)
         return ChangePlan(
             hypothesis=data["hypothesis"],
             target_dimension=data["target_dimension"],
@@ -74,7 +75,6 @@ class StrategistAgent:
         source_files: dict[str, str],
         ledger_summary: str,
         blocked_paths: tuple[str, ...] = (),
-        quality_details: str = "",
     ) -> str:
         file_sections = "\n\n".join(
             f"### {path}\n```python\n{content}\n```"
@@ -91,6 +91,5 @@ class StrategistAgent:
             f"## Previous Attempts\n{ledger_summary}\n\n"
             f"## Blocked Paths (DO NOT MODIFY)\n"
             f"{chr(10).join(f'  - {p}' for p in blocked_paths) if blocked_paths else '  (none)'}\n\n"
-            + (f"## Code Quality Details\n{quality_details}\n\n" if quality_details else "")
-            + "Propose exactly ONE hypothesis with a specific change plan."
+            "Propose exactly ONE hypothesis with a specific change plan."
         )

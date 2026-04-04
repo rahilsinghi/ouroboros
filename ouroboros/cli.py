@@ -49,6 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
     dash_parser.add_argument("--web", action="store_true", help="Launch web dashboard")
     dash_parser.add_argument("--port", type=int, help="Web dashboard port")
 
+    # meta
+    meta_parser = sub.add_parser("meta", help="Run the meta-learning loop")
+    meta_parser.add_argument("--agent", type=str, help="Target specific agent (observer/strategist/implementer)")
+    meta_parser.add_argument("--dry-run", action="store_true", help="Analyze and mutate only, no tournament")
+    meta_parser.add_argument("--status", action="store_true", help="Show prompt versions and win rates")
+
     # config
     config_parser = sub.add_parser("config", help="View or update configuration")
     config_sub = config_parser.add_subparsers(dest="config_command")
@@ -74,6 +80,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_ledger(config, args)
     elif args.command == "benchmark":
         _cmd_benchmark(config, args)
+    elif args.command == "meta":
+        _cmd_meta(config, args)
     elif args.command == "config":
         _cmd_config(config, args)
     elif args.command == "dashboard":
@@ -173,6 +181,52 @@ def _cmd_ledger(config, args):
     for e in entries:
         status = "+" if e.outcome == IterationOutcome.MERGED else "-"
         print(f"  {status} #{e.iteration:03d} {e.hypothesis[:60]:60s} [{e.outcome.value}]")
+
+
+def _cmd_meta(config, args):
+    repo_root = Path.cwd()
+
+    if args.status:
+        from ouroboros.telemetry.reader import TelemetryReader
+        reader = TelemetryReader(archive_dir=repo_root / ".ouroboros" / "archive")
+        summary = reader.get_summary()
+        if not summary:
+            print("No telemetry data yet. Run `ouroboros run` first.")
+            return
+        print("Prompt Version Performance:")
+        for version, stats in sorted(summary.items()):
+            wr = stats.get("win_rate", 0.0)
+            print(f"  {version}: {stats['merged']}/{stats['total']} merged ({wr:.0%} win rate)")
+        return
+
+    from ouroboros.agents.observer import OBSERVER_SYSTEM_PROMPT
+    from ouroboros.agents.strategist import STRATEGIST_SYSTEM_PROMPT
+    from ouroboros.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
+    from ouroboros.meta.agent import MetaAgent
+
+    meta = MetaAgent(
+        prompts_dir=repo_root / ".ouroboros" / "prompts",
+        archive_dir=repo_root / ".ouroboros" / "archive",
+        benchmark_dir=repo_root / ".ouroboros" / "benchmarks",
+        target_path=repo_root / config.target_path,
+        model=config.meta_model,
+        defaults={
+            "observer": OBSERVER_SYSTEM_PROMPT,
+            "strategist": STRATEGIST_SYSTEM_PROMPT,
+            "implementer": IMPLEMENTER_SYSTEM_PROMPT,
+        },
+        min_records=config.meta_min_records,
+    )
+
+    print(f"Running meta-agent (target: {args.agent or 'auto-select'})...")
+    result = meta.run(target_agent=args.agent)
+    print("\nMeta-Agent Result:")
+    print(f"  State:            {result.state}")
+    print(f"  Agent:            {result.agent}")
+    print(f"  Reason:           {result.reason}")
+    if result.new_version:
+        print(f"  Version:          v{result.old_version} -> v{result.new_version}")
+        print(f"  Tournament:       {result.tournament_score:.2f} (baseline: {result.baseline_score:.2f})")
 
 
 def _cmd_benchmark(config, args):

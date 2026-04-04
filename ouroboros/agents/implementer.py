@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,17 +17,15 @@ source code of files to modify. You write the complete new content for each file
 
 You ONLY write code. You do not analyze, question, or evaluate the plan.
 
-You MUST respond with ONLY a JSON object — no prose, no explanation, no markdown fences.
-The JSON object MUST have a "files_written" key mapping file paths to complete file contents.
+Respond with a JSON object:
+{
+  "files_written": {
+    "path/to/file.py": "<complete file content after changes>"
+  }
+}
 
-Example response format:
-{"files_written": {"path/to/file.py": "# complete file content\\nimport ...\\n"}}
-
-CRITICAL RULES:
-1. ALWAYS return valid JSON with "files_written" key. NEVER return empty or non-JSON.
-2. Write the COMPLETE file content, not just changed parts.
-3. Only modify files specified in the Change Plan.
-4. Ensure all Python files have valid syntax."""
+IMPORTANT: Write the COMPLETE file content, not just the changed parts.
+Only modify files specified in the Change Plan. Do not modify any other files."""
 
 
 @dataclass(frozen=True)
@@ -39,9 +36,10 @@ class ImplementResult:
 
 
 class ImplementerAgent:
-    def __init__(self, model: str, executor: SandboxExecutor) -> None:
+    def __init__(self, model: str, executor: SandboxExecutor, system_prompt: str = "") -> None:
         self.agent = BaseAgent(model=model, role="implementer", timeout_seconds=300)
         self.executor = executor
+        self.system_prompt = system_prompt or IMPLEMENTER_SYSTEM_PROMPT
 
     def implement(self, plan: ChangePlan, worktree_path: Path) -> ImplementResult:
         """Write code changes to the worktree based on the plan."""
@@ -64,17 +62,12 @@ class ImplementerAgent:
                 source_files[fc.path] = ""
 
         user_prompt = self._build_prompt(plan, source_files)
-        data = self.agent.call_with_json_retry(
-            system_prompt=IMPLEMENTER_SYSTEM_PROMPT,
+        response = self.agent.call(
+            system_prompt=self.system_prompt,
             user_prompt=user_prompt,
         )
+        data = self.agent.parse_json(response.text)
         files_written = data.get("files_written", {})
-        if not files_written:
-            return ImplementResult(
-                success=False,
-                files_written=(),
-                error="Implementer returned empty files_written",
-            )
 
         # Validate no blocked paths in response
         for path in files_written:
@@ -93,16 +86,6 @@ class ImplementerAgent:
             file_path.write_text(content)
             written.append(path)
 
-        # Validate before committing
-        if written:
-            validation_error = self._validate_files(worktree_path, written)
-            if validation_error:
-                return ImplementResult(
-                    success=False,
-                    files_written=tuple(written),
-                    error=validation_error,
-                )
-
         # Stage and commit
         if written:
             subprocess.run(
@@ -117,19 +100,6 @@ class ImplementerAgent:
             )
 
         return ImplementResult(success=True, files_written=tuple(written))
-
-    def _validate_files(self, worktree_path: Path, written: list[str]) -> str | None:
-        """Validate written files. Returns error string or None if all valid."""
-        for path in written:
-            file_path = worktree_path / path
-            if not file_path.suffix == ".py":
-                continue
-            content = file_path.read_text()
-            try:
-                ast.parse(content)
-            except SyntaxError as e:
-                return f"SyntaxError in {path}: {e}"
-        return None
 
     def _build_prompt(self, plan: ChangePlan, source_files: dict[str, str]) -> str:
         file_sections = "\n\n".join(

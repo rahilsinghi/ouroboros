@@ -33,12 +33,24 @@ sandbox:
     - "ouroboros/config.py"
     - ".git/"
     - "docs/"
+    - "tests/"
+    - "conftest.py"
+    - ".ouroboros/prompts/meta.md"
+    - ".ouroboros/benchmarks/"
+    - ".ouroboros/archive/"
   timeout_seconds: 300
 
 scoreboard:
   merge_gate:
     regression_rate: 1.0
     noise_tolerance: 0.005
+
+meta:
+  model: claude-opus-4-6
+  tournament_tasks: 5
+  rotating_task_refresh: 10
+  prompt_bloat_limit: 1.2
+  min_telemetry_records: 2
 
 budget:
   max_usd_per_run: 10.00

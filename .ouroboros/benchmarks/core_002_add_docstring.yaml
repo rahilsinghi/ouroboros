@@ -1,0 +1,10 @@
+name: add_docstring
+type: core
+description: "Add a docstring to the public function compute() in the prepared file."
+setup_file: |
+  def compute(x: int) -> int:
+      return x + 1
+setup_path: "ouroboros/_benchmark_target.py"
+expected_check: "has_docstring"
+target_function: "compute"
+target_dimension: "real_world"
