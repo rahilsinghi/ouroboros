@@ -15,7 +15,10 @@ from ouroboros.types import (
 
 
 class Ledger:
+    """Persistent append-only record of every improvement iteration."""
+
     def __init__(self, base_dir: Path) -> None:
+        """Initialize the ledger with a base directory for storage."""
         self.base_dir = base_dir
         self.ledger_file = base_dir / "ledger.jsonl"
 
@@ -49,6 +52,7 @@ class Ledger:
         return max(e.iteration for e in entries)
 
     def _serialize(self, entry: LedgerEntry) -> dict:
+        """Serialize a LedgerEntry to a JSON-compatible dict."""
         return {
             "iteration": entry.iteration,
             "timestamp": entry.timestamp,
@@ -63,6 +67,7 @@ class Ledger:
         }
 
     def _serialize_snapshot(self, snap: ScoreboardSnapshot) -> dict:
+        """Serialize a ScoreboardSnapshot to a dict."""
         return {
             "iteration": snap.iteration,
             "timestamp": snap.timestamp,
@@ -70,6 +75,7 @@ class Ledger:
         }
 
     def _deserialize(self, data: dict) -> LedgerEntry:
+        """Deserialize a dict to a LedgerEntry."""
         return LedgerEntry(
             iteration=data["iteration"],
             timestamp=data["timestamp"],
@@ -84,6 +90,7 @@ class Ledger:
         )
 
     def _deserialize_snapshot(self, data: dict) -> ScoreboardSnapshot:
+        """Deserialize a dict to a ScoreboardSnapshot."""
         return ScoreboardSnapshot(
             iteration=data["iteration"],
             timestamp=data.get("timestamp", ""),
