@@ -173,10 +173,32 @@ class MetaAgent:
         )
 
     def _select_worst_agent(self, summary: dict) -> str:
-        """Select the agent with the lowest win rate."""
-        agent_stats: dict[str, float] = {}
-        for version, stats in summary.items():
-            win_rate = stats.get("win_rate", 0.0)
-            if "implementer" not in agent_stats or win_rate < agent_stats.get("implementer", 1.0):
-                agent_stats["implementer"] = win_rate
-        return min(agent_stats, key=agent_stats.get, default="implementer")
+        """Select the agent that causes the most failures based on telemetry."""
+        failures = self.reader.get_failures(limit=20)
+        agent_failures: dict[str, int] = {"observer": 0, "strategist": 0, "implementer": 0}
+        for f in failures:
+            reason = f.get("failure_reason", "")
+            outcome = f.get("outcome", "")
+            # Check for [agent] tag in failure reason (new format)
+            tagged = False
+            for agent_name in agent_failures:
+                if reason.startswith(f"[{agent_name}]"):
+                    agent_failures[agent_name] += 1
+                    tagged = True
+                    break
+            if tagged:
+                continue
+            # Legacy records: for ABANDONED iterations, if implementer has 0 tokens
+            # but strategist has tokens, the strategist produced output that couldn't
+            # be parsed (JSON error) — that's a strategist failure
+            if outcome == "ABANDONED":
+                impl_in = f.get("tokens_implementer_in", 0)
+                strat_in = f.get("tokens_strategist_in", 0)
+                obs_in = f.get("tokens_observer_in", 0)
+                if impl_in == 0 and strat_in > 0:
+                    agent_failures["strategist"] += 1
+                elif strat_in == 0 and obs_in > 0:
+                    agent_failures["observer"] += 1
+                elif obs_in == 0:
+                    agent_failures["observer"] += 1
+        return max(agent_failures, key=agent_failures.get, default="implementer")

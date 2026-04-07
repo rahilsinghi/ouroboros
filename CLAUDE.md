@@ -17,17 +17,17 @@ Four-agent loop: OBSERVE → HYPOTHESIZE → IMPLEMENT → EVALUATE
 - **Implementer** (Sonnet): writes code in git worktree
 - **Evaluator** (Sonnet): runs merge gate (before/after scoreboard comparison)
 
-All models currently set to Sonnet for cost ($0.10/iteration).
+Observer/Strategist/Evaluator use Sonnet. Implementer and MetaAgent use Opus.
 
-## 6-Dimension Scoreboard (as of Phase 2)
+## 6-Dimension Scoreboard (as of Phase 3)
 | Dimension | Scorer | Score | Status |
 |-----------|--------|-------|--------|
 | code_quality | ruff (60%) + radon (40%) | 1.00 | Fixed: radon flag bug + all ruff violations resolved |
-| correctness | pytest pass rate | 1.00 | 104/104 tests pass |
+| correctness | pytest pass rate | 1.00 | 146 tests pass |
 | efficiency | source char count vs baseline | 1.00 | Auto-calibrated (baseline=0 means self-referential) |
 | regression | previously-passing still pass | 1.00 | Working |
 | tool_selection | routing accuracy | 1.00 | Placeholder |
-| real_world | docstring coverage (public callables) | 0.51 | Active — agents improving via autonomous merges |
+| real_world | docstring coverage (public callables) | 0.67 | Active — improved via meta-learning evolved prompts |
 
 ## Safety-Critical Files (blocked_paths in config)
 These files CANNOT be modified by the improvement loop:
@@ -68,15 +68,21 @@ Pre-merge kill switch. Checks: test count never decreases, ruff violations never
 - Prompt bloat gate: mutations capped at 120% of parent token count
 - Meta.md instruction: "EDIT or REPLACE, do NOT append"
 
+### Phase 3 Results
+- Meta-agent correctly identified Strategist as worst agent (80% of ABANDONED failures)
+- Evolved Strategist prompt: added history analysis, failure avoidance, docstring verification
+- Inner loop win rate: 0% (pre-mutation) → 40% (post-mutation)
+- real_world: 0.51 → 0.67 via meta-learning evolved prompts
+- 146 tests passing, 0 ruff violations
+
 ### Phase 2 Recap
 - 4 autonomous merges, real_world 0.35 → 0.51
 - Radon flag fix, CostTracker wired, Implementer hardened
-- 104 tests passing, 0 ruff violations
 
 ## Key Commands
 ```bash
 source .venv/bin/activate
-python -m pytest tests/ouroboros/ -v          # Run all tests (125+ tests)
+python -m pytest tests/ouroboros/ -v          # Run all tests (146+ tests)
 python -m ouroboros run --iterations 5        # Run inner improvement loop
 python -m ouroboros meta --status             # View prompt version win rates
 python -m ouroboros meta                      # Run meta-agent (prompt evolution)

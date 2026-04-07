@@ -33,6 +33,9 @@ class LoopResult:
     iterations_rolled_back: int
     total_duration_seconds: float
     stop_reason: str
+    total_cost_usd: float = 0.0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
 
 
 class ImprovementLoop:
@@ -98,12 +101,25 @@ class ImprovementLoop:
             if i < self.config.max_iterations - 1:
                 time.sleep(self.config.cooldown_seconds)
 
+        # Read final accumulated totals from all agents
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_cost_usd = 0.0
+        for agent in (self.observer, self.strategist, self.implementer):
+            tokens = self._read_agent_tokens(agent)
+            total_input_tokens += tokens[0]
+            total_output_tokens += tokens[1]
+            total_cost_usd += tokens[2]
+
         return LoopResult(
             iterations_run=i + 1,
             iterations_merged=merged,
             iterations_rolled_back=rolled_back,
             total_duration_seconds=time.time() - start_time,
             stop_reason=stop_reason,
+            total_cost_usd=total_cost_usd,
+            total_input_tokens=total_input_tokens,
+            total_output_tokens=total_output_tokens,
         )
 
     def _run_iteration(self, iteration: int) -> IterationOutcome:
@@ -222,6 +238,16 @@ class ImprovementLoop:
                     self.worktree_mgr.rollback(worktree)
                 except Exception:
                     pass
+            # Determine which agent failed based on token accumulation
+            if strat_tokens == (0, 0, 0.0) and obs_tokens != (0, 0, 0.0):
+                failing_agent = "strategist"
+            elif impl_tokens == (0, 0, 0.0) and strat_tokens != (0, 0, 0.0):
+                failing_agent = "implementer"
+            elif obs_tokens == (0, 0, 0.0):
+                failing_agent = "observer"
+            else:
+                failing_agent = "unknown"
+            failure_msg = f"[{failing_agent}] {e}"
             self._log_iteration(
                 iteration,
                 now,
@@ -230,11 +256,11 @@ class ImprovementLoop:
                 locals().get("baseline"),
                 locals().get("baseline"),
                 IterationOutcome.ABANDONED,
-                f"Exception: {e}",
+                f"Exception: {failure_msg}",
             )
             self._write_telemetry(
                 iteration, now, "ABANDONED", 0.0,
-                str(e), "", obs_tokens, strat_tokens, impl_tokens, (), "",
+                failure_msg, "", obs_tokens, strat_tokens, impl_tokens, (), "",
             )
             return IterationOutcome.ABANDONED
 
