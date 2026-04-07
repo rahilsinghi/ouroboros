@@ -9,6 +9,7 @@ from ouroboros.config import load_config
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build and return the argument parser for the ouroboros CLI."""
     parser = argparse.ArgumentParser(
         prog="ouroboros",
         description="Ouroboros: Self-improving agent engine",
@@ -67,6 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Parse arguments and dispatch to the appropriate subcommand handler."""
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -91,6 +93,7 @@ def main(argv: list[str] | None = None) -> None:
 
 
 def _cmd_run(config, args):
+    """Execute the main improvement loop with optional overrides."""
     overrides = {}
     if args.iterations:
         overrides["max_iterations"] = args.iterations
@@ -124,6 +127,7 @@ def _cmd_run(config, args):
 
 
 def _cmd_scoreboard(config, args):
+    """Display the current scoreboard or its history over time."""
     repo_root = Path.cwd()
     from ouroboros.history.ledger import Ledger
 
@@ -147,6 +151,7 @@ def _cmd_scoreboard(config, args):
 
 
 def _cmd_ledger(config, args):
+    """Display ledger entries with optional filtering by iteration or outcome."""
     repo_root = Path.cwd()
     from ouroboros.history.ledger import Ledger
     from ouroboros.types import IterationOutcome
@@ -184,6 +189,7 @@ def _cmd_ledger(config, args):
 
 
 def _cmd_meta(config, args):
+    """Run the meta-learning loop or display prompt version status."""
     repo_root = Path.cwd()
 
     if args.status:
@@ -230,11 +236,13 @@ def _cmd_meta(config, args):
 
 
 def _cmd_benchmark(config, args):
+    """Run the specified benchmark suite and display results."""
     print(f"Running benchmark suite: {args.suite}")
     print("(Benchmark runner not yet wired — coming in Phase 1 integration)")
 
 
 def _cmd_config(config, args):
+    """Show current configuration or update a configuration value."""
     if args.config_command == "show":
         for key, value in sorted(vars(config).items()):
             print(f"  {key}: {value}")
@@ -246,6 +254,7 @@ def _cmd_config(config, args):
 
 
 def _cmd_dashboard(config, args):
+    """Launch the terminal or web dashboard for viewing system status."""
     if args.web:
         port = args.port or config.dashboard_web_port
         print(f"Web dashboard not yet implemented. Will serve on port {port}.")
